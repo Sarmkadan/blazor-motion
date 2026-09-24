@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/blazor-motion/blazor-motion.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/blazor-motion.Tests/blazor-motion.Tests.csproj" />
+  </Folder>
+</Solution>
