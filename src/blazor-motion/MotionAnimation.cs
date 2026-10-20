@@ -59,7 +59,42 @@ public sealed record MotionAnimation(
     /// <summary>
     /// Returns the reverse of this animation (keyframes in opposite order, direction preserved).
     /// Useful for exit animations derived from enter animations.
+    /// Keyframes with an explicit <see cref="MotionKeyframe.Offset"/> have it mapped to <c>1 - Offset</c>.
     /// </summary>
     /// <returns>A new animation.</returns>
-    public MotionAnimation Reversed() => throw new NotImplementedException();
+    public MotionAnimation Reversed()
+    {
+        var reversed = Keyframes
+            .Reverse()
+            .Select(k => k with { Offset = k.Offset.HasValue ? 1.0 - k.Offset.Value : null })
+            .ToList()
+            .AsReadOnly();
+
+        return this with { Keyframes = reversed };
+    }
+
+    /// <summary>
+    /// Creates a <see cref="MotionAnimation"/> from an enumerable of keyframes.
+    /// </summary>
+    /// <param name="keyframes">One or more keyframes. Must not be empty.</param>
+    /// <param name="transition">
+    /// Timing parameters. When <c>null</c>, <see cref="MotionTransition.Default"/> is used.
+    /// </param>
+    /// <returns>A new animation.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="keyframes"/> is <c>null</c>.</exception>
+    /// <exception cref="ArgumentException"><paramref name="keyframes"/> is empty.</exception>
+    public static MotionAnimation FromKeyframes(
+        IEnumerable<MotionKeyframe> keyframes,
+        MotionTransition? transition = null)
+    {
+        ArgumentNullException.ThrowIfNull(keyframes);
+
+        var list = keyframes.ToList().AsReadOnly();
+        if (list.Count == 0)
+        {
+            throw new ArgumentException("At least one keyframe is required.", nameof(keyframes));
+        }
+
+        return new MotionAnimation(list, transition ?? MotionTransition.Default);
+    }
 }
