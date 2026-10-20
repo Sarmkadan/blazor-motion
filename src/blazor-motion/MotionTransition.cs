@@ -32,7 +32,12 @@ public sealed record MotionTransition(
     MotionDirection Direction)
 {
     /// <summary>300 ms, no delay, ease-in-out, single run.</summary>
-    public static MotionTransition Default => throw new NotImplementedException();
+    public static MotionTransition Default { get; } = new(
+        Duration: TimeSpan.FromMilliseconds(300),
+        Delay: TimeSpan.Zero,
+        Easing: MotionEasing.EaseInOut,
+        Repeat: 0,
+        Direction: MotionDirection.Normal);
 }
 
 /// <summary>

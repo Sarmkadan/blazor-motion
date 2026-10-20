@@ -28,7 +28,33 @@ public sealed record MotionAnimation(
     /// </summary>
     /// <param name="transition">The transition to use.</param>
     /// <returns>A new animation.</returns>
-    public MotionAnimation WithTransition(MotionTransition transition) => throw new NotImplementedException();
+    public MotionAnimation WithTransition(MotionTransition transition)
+    {
+        ArgumentNullException.ThrowIfNull(transition);
+        return this with { Transition = transition };
+    }
+
+    /// <summary>
+    /// Returns a copy with the transition's delay replaced.
+    /// </summary>
+    /// <param name="delay">New delay. Must be non-negative.</param>
+    /// <returns>A new animation with the adjusted delay.</returns>
+    public MotionAnimation WithDelay(TimeSpan delay)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(delay.Ticks, nameof(delay));
+        return this with { Transition = Transition with { Delay = delay } };
+    }
+
+    /// <summary>
+    /// Returns a copy with the transition's duration replaced.
+    /// </summary>
+    /// <param name="duration">New duration. Must be non-negative.</param>
+    /// <returns>A new animation with the adjusted duration.</returns>
+    public MotionAnimation WithDuration(TimeSpan duration)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(duration.Ticks, nameof(duration));
+        return this with { Transition = Transition with { Duration = duration } };
+    }
 
     /// <summary>
     /// Returns the reverse of this animation (keyframes in opposite order, direction preserved).
