@@ -9,29 +9,37 @@ namespace BlazorMotion.Interop;
 internal sealed class MotionHandle : IMotionHandle
 {
     private readonly IJSObjectReference _module;
-    private readonly IReadOnlyList<int> _ids;
-    private Task? _finished;
+    private readonly int[] _animationIds;
+    private readonly TaskCompletionSource _finished = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private bool _cancelled;
 
     /// <summary>
-    /// Creates a handle over the given animation ids.
+    /// Creates a handle over the given animation ids and starts watching them for completion.
     /// </summary>
     /// <param name="module">The loaded <c>blazor-motion.js</c> module.</param>
-    /// <param name="ids">Ids returned by <c>animate</c> or <c>playTimeline</c>.</param>
-    public MotionHandle(IJSObjectReference module, IReadOnlyList<int> ids)
+    /// <param name="animationIds">Ids returned by <c>animate</c> or <c>playTimeline</c>.</param>
+    public MotionHandle(IJSObjectReference module, IReadOnlyList<int> animationIds)
     {
         ArgumentNullException.ThrowIfNull(module);
-        ArgumentNullException.ThrowIfNull(ids);
+        ArgumentNullException.ThrowIfNull(animationIds);
 
         _module = module;
-        _ids = ids;
+        _animationIds = [.. animationIds];
+
+        _ = WatchFinishedAsync();
     }
+
+    /// <summary>
+    /// The browser-side ids this handle controls. Exposed for tests.
+    /// </summary>
+    internal IReadOnlyList<int> AnimationIds => _animationIds;
 
     /// <inheritdoc />
     /// <remarks>
-    /// Created on first access, so no interop call is made until someone awaits it.
-    /// Faults with <see cref="OperationCanceledException"/> if any animation was cancelled.
+    /// Completes when every animation has finished. Faults with <see cref="OperationCanceledException"/>
+    /// if any animation was cancelled.
     /// </remarks>
-    public Task Finished => _finished ??= WaitForFinishAsync();
+    public Task Finished => _finished.Task;
 
     /// <inheritdoc />
     public async ValueTask PauseAsync(CancellationToken cancellationToken = default)
@@ -49,13 +57,21 @@ internal sealed class MotionHandle : IMotionHandle
     public async ValueTask CancelAsync(CancellationToken cancellationToken = default)
     {
         await InvokeForEachAsync("cancel", cancellationToken);
+
+        _cancelled = true;
     }
 
     /// <summary>
-    /// Cancels the animations. Swallows <see cref="JSDisconnectedException"/>: if the circuit is gone, so are the animations.
+    /// Cancels the animations unless already cancelled or finished. Swallows <see cref="JSDisconnectedException"/>
+    /// and <see cref="ObjectDisposedException"/>: if the circuit or module is gone, so are the animations.
     /// </summary>
     public async ValueTask DisposeAsync()
     {
+        if (_cancelled || _finished.Task.IsCompleted)
+        {
+            return;
+        }
+
         try
         {
             await CancelAsync();
@@ -64,21 +80,40 @@ internal sealed class MotionHandle : IMotionHandle
         {
             // The circuit is gone, so the browser-side animations are gone with it.
         }
+        catch (ObjectDisposedException)
+        {
+            // The module was disposed with the interop, so the animations are gone with it.
+        }
     }
 
-    private async Task WaitForFinishAsync()
+    /// <summary>
+    /// Awaits every <c>finished</c> promise and completes <see cref="Finished"/> from the outcome.
+    /// Never throws: any failure is stored in <see cref="Finished"/> instead.
+    /// </summary>
+    private async Task WatchFinishedAsync()
     {
-        var results = await Task.WhenAll(_ids.Select(id => _module.InvokeAsync<bool>("finished", id).AsTask()));
-
-        if (results.Any(finished => !finished))
+        try
         {
-            throw new OperationCanceledException("A motion animation was cancelled before it finished.");
+            var results = await Task.WhenAll(_animationIds.Select(id => _module.InvokeAsync<bool>("finished", id).AsTask()));
+
+            if (results.Any(finished => !finished))
+            {
+                _finished.TrySetException(new OperationCanceledException("A motion animation was cancelled before it finished."));
+            }
+            else
+            {
+                _finished.TrySetResult();
+            }
+        }
+        catch (Exception exception)
+        {
+            _finished.TrySetException(exception);
         }
     }
 
     private async ValueTask InvokeForEachAsync(string method, CancellationToken cancellationToken)
     {
-        foreach (var id in _ids)
+        foreach (var id in _animationIds)
         {
             await _module.InvokeVoidAsync(method, cancellationToken, id);
         }
