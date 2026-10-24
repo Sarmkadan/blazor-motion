@@ -23,7 +23,10 @@ src/blazor-motion/          library (PackageId BlazorMotion, namespace BlazorMot
   MotionBuilder.cs          fluent builder producing MotionAnimation
   MotionTimeline.cs         sequencing/orchestration of several animations
   MotionTransition.cs       easing, duration, delay, repeat
-  wwwroot/                  (planned) blazor-motion.js - Web Animations API adapter
+  MotionOptions.cs          global options (DefaultTransition, ModulePath, RespectReducedMotion)
+  ServiceCollectionExtensions.cs AddBlazorMotion() registration
+  Interop/                  JS interop implementation: MotionInterop, MotionHandle, MotionPayload
+  wwwroot/blazor-motion.js  Web Animations API adapter, static web asset imported lazily
 tests/blazor-motion.Tests/  xUnit
 ```
 
