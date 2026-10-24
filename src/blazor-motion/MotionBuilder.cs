@@ -19,6 +19,8 @@ public sealed class MotionBuilder
 {
     private MotionKeyframe? _from;
     private readonly List<MotionKeyframe> _to = new();
+    private MotionTransition _transition = MotionTransition.Default;
+    private bool _fillForwards = true;
 
     /// <summary>
     /// Defines the starting keyframe. Optional; when omitted the element's current computed style is used.
@@ -84,14 +86,28 @@ public sealed class MotionBuilder
     /// </summary>
     /// <param name="configure">Callback receiving a <see cref="MotionTransitionBuilder"/>.</param>
     /// <returns>This builder.</returns>
-    public MotionBuilder WithTransition(Action<MotionTransitionBuilder> configure) => throw new NotImplementedException();
+    public MotionBuilder WithTransition(Action<MotionTransitionBuilder> configure)
+    {
+        ArgumentNullException.ThrowIfNull(configure);
+
+        var builder = new MotionTransitionBuilder(_transition);
+        configure(builder);
+        _transition = builder.Build();
+        return this;
+    }
 
     /// <summary>
     /// Uses a pre-built transition.
     /// </summary>
     /// <param name="transition">The transition.</param>
     /// <returns>This builder.</returns>
-    public MotionBuilder WithTransition(MotionTransition transition) => throw new NotImplementedException();
+    public MotionBuilder WithTransition(MotionTransition transition)
+    {
+        ArgumentNullException.ThrowIfNull(transition);
+
+        _transition = transition;
+        return this;
+    }
 
     /// <summary>
     /// Shorthand for a spring-eased transition.
@@ -99,14 +115,27 @@ public sealed class MotionBuilder
     /// <param name="stiffness">Spring stiffness.</param>
     /// <param name="damping">Damping.</param>
     /// <returns>This builder.</returns>
-    public MotionBuilder Spring(double stiffness = 100, double damping = 10) => throw new NotImplementedException();
+    public MotionBuilder Spring(double stiffness = 100, double damping = 10)
+    {
+        var easing = MotionEasing.Spring(stiffness, damping);
+        _transition = _transition with
+        {
+            Easing = easing,
+            Duration = easing.SuggestedDuration ?? _transition.Duration,
+        };
+        return this;
+    }
 
     /// <summary>
     /// Controls whether the final state persists after completion. Default <c>true</c>.
     /// </summary>
     /// <param name="fill">Keep final keyframe applied.</param>
     /// <returns>This builder.</returns>
-    public MotionBuilder FillForwards(bool fill = true) => throw new NotImplementedException();
+    public MotionBuilder FillForwards(bool fill = true)
+    {
+        _fillForwards = fill;
+        return this;
+    }
 
     /// <summary>
     /// Produces the immutable animation.
