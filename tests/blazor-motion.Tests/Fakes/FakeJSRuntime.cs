@@ -74,6 +74,20 @@ public sealed class FakeJSObjectReference : IJSObjectReference
     /// <summary>True once <see cref="DisposeAsync"/> has run.</summary>
     public bool IsDisposed { get; private set; }
 
+    private readonly Dictionary<int, FinishedGate> _finishedGates = [];
+
+    /// <summary>
+    /// Holds the <c>finished</c> call for <paramref name="animationId"/> until the test calls <see cref="FinishedGate.Resolve"/>.
+    /// Takes precedence over <see cref="Results"/> for that id.
+    /// </summary>
+    /// <param name="animationId">The id the handle will pass to <c>finished</c>.</param>
+    public FinishedGate GateFinished(int animationId)
+    {
+        var gate = new FinishedGate();
+        _finishedGates[animationId] = gate;
+        return gate;
+    }
+
     /// <inheritdoc />
     public ValueTask<TValue> InvokeAsync<TValue>(string identifier, object?[]? args) =>
         InvokeAsync<TValue>(identifier, CancellationToken.None, args);
@@ -90,6 +104,11 @@ public sealed class FakeJSObjectReference : IJSObjectReference
 
         await Task.Yield();
 
+        if (identifier == "finished" && args is [int id] && _finishedGates.TryGetValue(id, out var gate))
+        {
+            return FakeResult.Cast<TValue>(await gate.AwaitOutcomeAsync());
+        }
+
         return FakeResult.Cast<TValue>(Results.TryGetValue(identifier, out var result) ? result(args) : null);
     }
 
@@ -98,6 +117,29 @@ public sealed class FakeJSObjectReference : IJSObjectReference
     {
         IsDisposed = true;
         return ValueTask.CompletedTask;
+    }
+}
+
+/// <summary>
+/// Controls one pending <c>finished</c> promise. The fake holds the call until <see cref="Resolve"/> is called;
+/// <see cref="Reached"/> completes once the call is waiting on it, so tests can assert "still pending" without timing.
+/// </summary>
+public sealed class FinishedGate
+{
+    private readonly TaskCompletionSource<bool> _outcome = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private readonly TaskCompletionSource _reached = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+    /// <summary>Completes once the <c>finished</c> call is waiting on this gate.</summary>
+    public Task Reached => _reached.Task;
+
+    /// <summary>Resolves the pending <c>finished</c> call: <c>true</c> for a finished animation, <c>false</c> for a cancelled one.</summary>
+    /// <param name="finished">The value the JS promise resolves to.</param>
+    public void Resolve(bool finished) => _outcome.TrySetResult(finished);
+
+    internal Task<bool> AwaitOutcomeAsync()
+    {
+        _reached.TrySetResult();
+        return _outcome.Task;
     }
 }
 
