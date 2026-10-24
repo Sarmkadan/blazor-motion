@@ -62,6 +62,8 @@ public sealed class MotionBuilder
     /// <param name="rotate">Rotation in degrees.</param>
     /// <param name="opacity">Opacity 0..1.</param>
     /// <returns>This builder.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="opacity"/> is outside 0..1 (or NaN), or <paramref name="scale"/> is negative (or NaN).</exception>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="x"/>, <paramref name="y"/> or <paramref name="rotate"/> is NaN or infinite.</exception>
     public MotionBuilder From(
         double? x = null,
         double? y = null,
@@ -69,6 +71,8 @@ public sealed class MotionBuilder
         double? rotate = null,
         double? opacity = null)
     {
+        ValidateValues(x, y, scale, rotate, opacity);
+
         _from = new MotionKeyframe(BuildProperties(x, y, scale, rotate, opacity), Offset: 0);
         return this;
     }
@@ -82,6 +86,8 @@ public sealed class MotionBuilder
     /// <param name="rotate">Rotation in degrees.</param>
     /// <param name="opacity">Opacity 0..1.</param>
     /// <returns>This builder.</returns>
+    /// <exception cref="ArgumentException">Thrown when no property is given, or when <paramref name="x"/>, <paramref name="y"/> or <paramref name="rotate"/> is NaN or infinite.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="opacity"/> is outside 0..1 (or NaN), or <paramref name="scale"/> is negative (or NaN).</exception>
     public MotionBuilder To(
         double? x = null,
         double? y = null,
@@ -94,6 +100,8 @@ public sealed class MotionBuilder
             throw new ArgumentException("At least one property must be set");
         }
 
+        ValidateValues(x, y, scale, rotate, opacity);
+
         _to.Add(new MotionKeyframe(BuildProperties(x, y, scale, rotate, opacity)));
         return this;
     }
@@ -104,9 +112,36 @@ public sealed class MotionBuilder
     /// <param name="cssProperties">camelCase CSS property -> value.</param>
     /// <param name="offset">Position 0..1, or <c>null</c> for even distribution.</param>
     /// <returns>This builder.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="cssProperties"/> is <c>null</c>.</exception>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="cssProperties"/> is empty, or any key is <c>null</c> or whitespace, or any value is <c>null</c>.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="offset"/> is outside 0..1 (or NaN).</exception>
     public MotionBuilder To(IReadOnlyDictionary<string, string> cssProperties, double? offset = null)
     {
         ArgumentNullException.ThrowIfNull(cssProperties);
+
+        if (cssProperties.Count == 0)
+        {
+            throw new ArgumentException("At least one CSS property must be provided.", nameof(cssProperties));
+        }
+
+        foreach (var (key, value) in cssProperties)
+        {
+            if (string.IsNullOrWhiteSpace(key))
+            {
+                throw new ArgumentException("CSS property names must not be null or whitespace.", nameof(cssProperties));
+            }
+
+            if (value is null)
+            {
+                throw new ArgumentException($"CSS property '{key}' must not have a null value.", nameof(cssProperties));
+            }
+        }
+
+        if (offset is { } o)
+        {
+            ArgumentOutOfRangeException.ThrowIfLessThan(o, 0, nameof(offset));
+            ArgumentOutOfRangeException.ThrowIfGreaterThan(o, 1, nameof(offset));
+        }
 
         _to.Add(new MotionKeyframe(new Dictionary<string, string>(cssProperties), offset));
         return this;
@@ -117,6 +152,7 @@ public sealed class MotionBuilder
     /// </summary>
     /// <param name="configure">Callback receiving a <see cref="MotionTransitionBuilder"/>.</param>
     /// <returns>This builder.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="configure"/> is <c>null</c>.</exception>
     public MotionBuilder WithTransition(Action<MotionTransitionBuilder> configure)
     {
         ArgumentNullException.ThrowIfNull(configure);
@@ -132,6 +168,7 @@ public sealed class MotionBuilder
     /// </summary>
     /// <param name="transition">The transition.</param>
     /// <returns>This builder.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="transition"/> is <c>null</c>.</exception>
     public MotionBuilder WithTransition(MotionTransition transition)
     {
         ArgumentNullException.ThrowIfNull(transition);
@@ -146,8 +183,12 @@ public sealed class MotionBuilder
     /// <param name="stiffness">Spring stiffness.</param>
     /// <param name="damping">Damping.</param>
     /// <returns>This builder.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="stiffness"/> is not greater than 0 (or NaN), or <paramref name="damping"/> is negative (or NaN).</exception>
     public MotionBuilder Spring(double stiffness = 100, double damping = 10)
     {
+        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(stiffness, 0, nameof(stiffness));
+        ArgumentOutOfRangeException.ThrowIfLessThan(damping, 0, nameof(damping));
+
         var easing = MotionEasing.Spring(stiffness, damping);
         _transition = _transition with
         {
@@ -213,6 +254,39 @@ public sealed class MotionBuilder
         }
 
         return new MotionAnimation(keyframes.AsReadOnly(), _transition, _fillForwards);
+    }
+
+    /// <summary>
+    /// Rejects values that cannot be rendered as valid CSS. Shared by <see cref="From"/> and <see cref="To(double?, double?, double?, double?, double?)"/>.
+    /// NaN is caught by the range checks because <c>CompareTo</c> orders it below every number.
+    /// </summary>
+    private static void ValidateValues(double? x, double? y, double? scale, double? rotate, double? opacity)
+    {
+        if (x is { } tx && !double.IsFinite(tx))
+        {
+            throw new ArgumentException("Must be a finite number.", nameof(x));
+        }
+
+        if (y is { } ty && !double.IsFinite(ty))
+        {
+            throw new ArgumentException("Must be a finite number.", nameof(y));
+        }
+
+        if (rotate is { } r && !double.IsFinite(r))
+        {
+            throw new ArgumentException("Must be a finite number.", nameof(rotate));
+        }
+
+        if (scale is { } s)
+        {
+            ArgumentOutOfRangeException.ThrowIfLessThan(s, 0, nameof(scale));
+        }
+
+        if (opacity is { } o)
+        {
+            ArgumentOutOfRangeException.ThrowIfLessThan(o, 0, nameof(opacity));
+            ArgumentOutOfRangeException.ThrowIfGreaterThan(o, 1, nameof(opacity));
+        }
     }
 
     /// <summary>
