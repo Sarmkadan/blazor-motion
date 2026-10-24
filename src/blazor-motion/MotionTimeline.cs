@@ -29,7 +29,7 @@ public sealed class MotionTimeline
         _entries.Any(e => e.Animation.Transition.Repeat == MotionTransition.InfiniteRepeat);
 
     /// <summary>Total duration including the longest-running entry and its delay/repeat.</summary>
-    public TimeSpan TotalDuration => throw new NotImplementedException();
+    public TimeSpan TotalDuration => _entries.Count == 0 ? TimeSpan.Zero : _entries.Max(EntryEnd);
 
     /// <summary>
     /// Appends an animation. By default it starts when the previous entry ends.
@@ -82,10 +82,47 @@ public sealed class MotionTimeline
 
     /// <summary>
     /// Adds the same animation to many elements, each starting <paramref name="stagger"/> after the previous one.
+    /// The first element starts when the last existing entry ends (or at zero for an empty timeline).
     /// </summary>
     /// <param name="targets">Elements in stagger order.</param>
     /// <param name="animation">Animation applied to each.</param>
     /// <param name="stagger">Gap between consecutive starts.</param>
     /// <returns>This timeline.</returns>
-    public MotionTimeline Stagger(IEnumerable<ElementReference> targets, MotionAnimation animation, TimeSpan stagger) => throw new NotImplementedException();
+    public MotionTimeline Stagger(IEnumerable<ElementReference> targets, MotionAnimation animation, TimeSpan stagger)
+    {
+        var baseStart = _entries.Count == 0 ? TimeSpan.Zero : EntryEnd(_entries[^1]);
+
+        return StaggerFrom(targets, animation, stagger, baseStart);
+    }
+
+    /// <summary>
+    /// Adds the same animation to many elements, each starting <paramref name="stagger"/> after the previous one,
+    /// with the first element starting at the absolute position <paramref name="startAt"/>.
+    /// </summary>
+    /// <param name="targets">Elements in stagger order.</param>
+    /// <param name="animation">Animation applied to each.</param>
+    /// <param name="stagger">Gap between consecutive starts.</param>
+    /// <param name="startAt">Absolute offset from the timeline start of the first element.</param>
+    /// <returns>This timeline.</returns>
+    public MotionTimeline Stagger(IEnumerable<ElementReference> targets, MotionAnimation animation, TimeSpan stagger, TimeSpan startAt) =>
+        StaggerFrom(targets, animation, stagger, startAt);
+
+    /// <summary>
+    /// Removes all entries, returning the timeline to its empty state.
+    /// </summary>
+    public void Clear() => _entries.Clear();
+
+    private MotionTimeline StaggerFrom(IEnumerable<ElementReference> targets, MotionAnimation animation, TimeSpan stagger, TimeSpan baseStart)
+    {
+        ArgumentNullException.ThrowIfNull(targets);
+        ArgumentNullException.ThrowIfNull(animation);
+
+        var list = targets.ToList();
+        for (var i = 0; i < list.Count; i++)
+        {
+            AddEntry(new MotionTimelineEntry(list[i], animation, baseStart + stagger * i));
+        }
+
+        return this;
+    }
 }
