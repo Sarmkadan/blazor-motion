@@ -38,6 +38,7 @@ public sealed class MotionTimeline
     /// <param name="animation">Animation to run.</param>
     /// <param name="offset">Shift relative to the default start; negative overlaps the previous entry.</param>
     /// <returns>This timeline.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="animation"/> is <see langword="null"/>.</exception>
     public MotionTimeline Add(ElementReference target, MotionAnimation animation, TimeSpan? offset = null)
     {
         ArgumentNullException.ThrowIfNull(animation);
@@ -53,11 +54,17 @@ public sealed class MotionTimeline
     /// </summary>
     /// <param name="target">Element to animate.</param>
     /// <param name="animation">Animation to run.</param>
-    /// <param name="at">Absolute offset from the timeline start.</param>
+    /// <param name="at">Absolute offset from the timeline start. Must be non-negative.</param>
     /// <returns>This timeline.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="animation"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="at"/> is negative.</exception>
     public MotionTimeline AddAt(ElementReference target, MotionAnimation animation, TimeSpan at)
     {
         ArgumentNullException.ThrowIfNull(animation);
+        if (at < TimeSpan.Zero)
+        {
+            throw new ArgumentOutOfRangeException(nameof(at), at, "Timeline offset must be non-negative.");
+        }
 
         return AddEntry(new MotionTimelineEntry(target, animation, at));
     }
@@ -86,10 +93,15 @@ public sealed class MotionTimeline
     /// </summary>
     /// <param name="targets">Elements in stagger order.</param>
     /// <param name="animation">Animation applied to each.</param>
-    /// <param name="stagger">Gap between consecutive starts.</param>
+    /// <param name="stagger">Gap between consecutive starts. Must be non-negative.</param>
     /// <returns>This timeline.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="targets"/> or <paramref name="animation"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="stagger"/> is negative.</exception>
     public MotionTimeline Stagger(IEnumerable<ElementReference> targets, MotionAnimation animation, TimeSpan stagger)
     {
+        ArgumentNullException.ThrowIfNull(targets);
+        ArgumentNullException.ThrowIfNull(animation);
+
         var baseStart = _entries.Count == 0 ? TimeSpan.Zero : EntryEnd(_entries[^1]);
 
         return StaggerFrom(targets, animation, stagger, baseStart);
@@ -101,11 +113,20 @@ public sealed class MotionTimeline
     /// </summary>
     /// <param name="targets">Elements in stagger order.</param>
     /// <param name="animation">Animation applied to each.</param>
-    /// <param name="stagger">Gap between consecutive starts.</param>
-    /// <param name="startAt">Absolute offset from the timeline start of the first element.</param>
+    /// <param name="stagger">Gap between consecutive starts. Must be non-negative.</param>
+    /// <param name="startAt">Absolute offset from the timeline start of the first element. Must be non-negative.</param>
     /// <returns>This timeline.</returns>
-    public MotionTimeline Stagger(IEnumerable<ElementReference> targets, MotionAnimation animation, TimeSpan stagger, TimeSpan startAt) =>
-        StaggerFrom(targets, animation, stagger, startAt);
+    /// <exception cref="ArgumentNullException"><paramref name="targets"/> or <paramref name="animation"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="stagger"/> or <paramref name="startAt"/> is negative.</exception>
+    public MotionTimeline Stagger(IEnumerable<ElementReference> targets, MotionAnimation animation, TimeSpan stagger, TimeSpan startAt)
+    {
+        if (startAt < TimeSpan.Zero)
+        {
+            throw new ArgumentOutOfRangeException(nameof(startAt), startAt, "Timeline offset must be non-negative.");
+        }
+
+        return StaggerFrom(targets, animation, stagger, startAt);
+    }
 
     /// <summary>
     /// Removes all entries, returning the timeline to its empty state.
@@ -116,6 +137,10 @@ public sealed class MotionTimeline
     {
         ArgumentNullException.ThrowIfNull(targets);
         ArgumentNullException.ThrowIfNull(animation);
+        if (stagger < TimeSpan.Zero)
+        {
+            throw new ArgumentOutOfRangeException(nameof(stagger), stagger, "Stagger gap must be non-negative.");
+        }
 
         var list = targets.ToList();
         for (var i = 0; i < list.Count; i++)

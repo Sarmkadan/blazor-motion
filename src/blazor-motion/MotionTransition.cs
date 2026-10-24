@@ -78,6 +78,7 @@ public sealed class MotionTransitionBuilder
     /// <summary>Sets the duration of one iteration.</summary>
     /// <param name="duration">Must be non-negative.</param>
     /// <returns>This builder.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="duration"/> is negative.</exception>
     public MotionTransitionBuilder Duration(TimeSpan duration)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(duration.Ticks, nameof(duration));
@@ -88,6 +89,7 @@ public sealed class MotionTransitionBuilder
     /// <summary>Sets the delay before the first iteration.</summary>
     /// <param name="delay">Must be non-negative.</param>
     /// <returns>This builder.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="delay"/> is negative.</exception>
     public MotionTransitionBuilder Delay(TimeSpan delay)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(delay.Ticks, nameof(delay));
@@ -106,20 +108,33 @@ public sealed class MotionTransitionBuilder
 
     /// <summary>Repeats the animation a number of extra times.</summary>
     /// <param name="count">Additional iterations. Use <see cref="Forever"/> to loop.</param>
-    /// <param name="direction">Direction across iterations.</param>
+    /// <param name="direction">Direction across iterations. Must be a defined <see cref="MotionDirection"/> value.</param>
     /// <returns>This builder.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="count"/> is negative, or <paramref name="direction"/> is not a defined value.</exception>
     public MotionTransitionBuilder Repeat(int count, MotionDirection direction = MotionDirection.Normal)
     {
+        ArgumentOutOfRangeException.ThrowIfNegative(count, nameof(count));
+        if (!Enum.IsDefined(direction))
+        {
+            throw new ArgumentOutOfRangeException(nameof(direction), direction, "Unknown playback direction.");
+        }
+
         _repeat = count;
         _direction = direction;
         return this;
     }
 
     /// <summary>Loops the animation indefinitely.</summary>
-    /// <param name="direction">Direction across iterations.</param>
+    /// <param name="direction">Direction across iterations. Must be a defined <see cref="MotionDirection"/> value.</param>
     /// <returns>This builder.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="direction"/> is not a defined value.</exception>
     public MotionTransitionBuilder Forever(MotionDirection direction = MotionDirection.Alternate)
     {
+        if (!Enum.IsDefined(direction))
+        {
+            throw new ArgumentOutOfRangeException(nameof(direction), direction, "Unknown playback direction.");
+        }
+
         _repeat = MotionTransition.InfiniteRepeat;
         _direction = direction;
         return this;
