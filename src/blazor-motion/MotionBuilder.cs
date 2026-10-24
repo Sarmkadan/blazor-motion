@@ -23,6 +23,37 @@ public sealed class MotionBuilder
     private bool _fillForwards = true;
 
     /// <summary>
+    /// Creates an empty builder. Equivalent to <c>new MotionBuilder()</c>.
+    /// </summary>
+    /// <returns>A new, empty builder.</returns>
+    public static MotionBuilder Create() => new();
+
+    /// <summary>
+    /// Preset: fades an element in from opacity 0 to 1.
+    /// </summary>
+    /// <returns>A builder with the preset keyframes; chain <c>WithTransition</c> to adjust timing.</returns>
+    public static MotionBuilder FadeIn() => new MotionBuilder()
+        .From(opacity: 0)
+        .To(opacity: 1);
+
+    /// <summary>
+    /// Preset: fades an element out from opacity 1 to 0.
+    /// </summary>
+    /// <returns>A builder with the preset keyframes; chain <c>WithTransition</c> to adjust timing.</returns>
+    public static MotionBuilder FadeOut() => new MotionBuilder()
+        .From(opacity: 1)
+        .To(opacity: 0);
+
+    /// <summary>
+    /// Preset: slides an element up into place while fading it in.
+    /// </summary>
+    /// <param name="distancePx">Starting distance below the final position, in px. Default 20.</param>
+    /// <returns>A builder with the preset keyframes; chain <c>WithTransition</c> to adjust timing.</returns>
+    public static MotionBuilder SlideUp(double distancePx = 20) => new MotionBuilder()
+        .From(y: distancePx, opacity: 0)
+        .To(y: 0, opacity: 1);
+
+    /// <summary>
     /// Defines the starting keyframe. Optional; when omitted the element's current computed style is used.
     /// </summary>
     /// <param name="x">translateX in px.</param>
@@ -138,11 +169,51 @@ public sealed class MotionBuilder
     }
 
     /// <summary>
-    /// Produces the immutable animation.
+    /// Produces the immutable animation. The builder remains usable afterwards; the result does not share state with it.
     /// </summary>
     /// <returns>A <see cref="MotionAnimation"/>.</returns>
-    /// <exception cref="InvalidOperationException">Thrown when no <c>To</c> keyframe was added.</exception>
-    public MotionAnimation Build() => throw new NotImplementedException();
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when no <c>To</c> keyframe was added, or when explicit keyframe offsets are outside 0..1 or decrease.
+    /// </exception>
+    public MotionAnimation Build()
+    {
+        if (_to.Count == 0)
+        {
+            throw new InvalidOperationException("Add at least one To() keyframe before Build()");
+        }
+
+        var keyframes = new List<MotionKeyframe>(_to.Count + 1);
+        if (_from is not null)
+        {
+            keyframes.Add(_from);
+        }
+
+        keyframes.AddRange(_to);
+
+        double? previous = null;
+        foreach (var keyframe in keyframes)
+        {
+            if (keyframe.Offset is not { } offset)
+            {
+                continue;
+            }
+
+            if (offset < 0 || offset > 1)
+            {
+                throw new InvalidOperationException($"Keyframe offset {Format(offset)} must be within 0..1.");
+            }
+
+            if (previous is { } last && offset < last)
+            {
+                throw new InvalidOperationException(
+                    $"Keyframe offsets must be non-decreasing, but {Format(offset)} follows {Format(last)}.");
+            }
+
+            previous = offset;
+        }
+
+        return new MotionAnimation(keyframes.AsReadOnly(), _transition, _fillForwards);
+    }
 
     /// <summary>
     /// Maps the transform-related and opacity arguments to CSS properties. Only non-null parts are emitted.
