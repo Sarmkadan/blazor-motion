@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Components;
+using Microsoft.Extensions.Options;
 using Microsoft.JSInterop;
 
 namespace BlazorMotion.Interop;
@@ -9,9 +10,8 @@ namespace BlazorMotion.Interop;
 /// </summary>
 internal sealed class MotionInterop : IMotionInterop, IAsyncDisposable
 {
-    private const string ModulePath = "./_content/BlazorMotion/blazor-motion.js";
-
     private readonly IJSRuntime _js;
+    private readonly IOptions<MotionOptions> _options;
     private readonly SemaphoreSlim _moduleLock = new(1, 1);
     private IJSObjectReference? _module;
     private bool _disposed;
@@ -20,11 +20,14 @@ internal sealed class MotionInterop : IMotionInterop, IAsyncDisposable
     /// Creates the interop bridge. The module is not loaded until the first call.
     /// </summary>
     /// <param name="js">The JS runtime of the current circuit or WebAssembly host.</param>
-    public MotionInterop(IJSRuntime js)
+    /// <param name="options">Supplies the module path and the global settings forwarded to JS.</param>
+    public MotionInterop(IJSRuntime js, IOptions<MotionOptions> options)
     {
         ArgumentNullException.ThrowIfNull(js);
+        ArgumentNullException.ThrowIfNull(options);
 
         _js = js;
+        _options = options;
     }
 
     /// <inheritdoc />
@@ -89,7 +92,7 @@ internal sealed class MotionInterop : IMotionInterop, IAsyncDisposable
     }
 
     /// <summary>
-    /// Imports the module once. The semaphore makes concurrent first calls wait for a single import.
+    /// Imports the module once and passes it the global settings. The semaphore makes concurrent first calls wait for a single import.
     /// </summary>
     private async ValueTask<IJSObjectReference> GetModuleAsync(CancellationToken cancellationToken)
     {
@@ -105,7 +108,14 @@ internal sealed class MotionInterop : IMotionInterop, IAsyncDisposable
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
 
-            _module ??= await _js.InvokeAsync<IJSObjectReference>("import", cancellationToken, ModulePath);
+            if (_module is null)
+            {
+                var options = _options.Value;
+                var module = await _js.InvokeAsync<IJSObjectReference>("import", cancellationToken, options.ModulePath);
+                await module.InvokeVoidAsync("configure", cancellationToken, new { respectReducedMotion = options.RespectReducedMotion });
+                _module = module;
+            }
+
             return _module;
         }
         finally

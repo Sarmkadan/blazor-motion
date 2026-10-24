@@ -25,6 +25,16 @@
 
 const animations = new Map();
 let nextId = 1;
+let respectReducedMotion = true;
+
+/**
+ * Receives the global settings from MotionOptions. Called once, right after the module is imported.
+ * Collapsing durations to 0 under prefers-reduced-motion is not implemented yet.
+ * @param {{ respectReducedMotion: boolean }} options
+ */
+export function configure(options) {
+  respectReducedMotion = options?.respectReducedMotion !== false;
+}
 
 function requireElement(element, method, api) {
   if (element == null || typeof element[api] !== "function") {
