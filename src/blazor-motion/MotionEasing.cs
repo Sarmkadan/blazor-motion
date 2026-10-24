@@ -8,13 +8,24 @@ namespace BlazorMotion;
 /// </summary>
 public readonly record struct MotionEasing
 {
-    private MotionEasing(string cssValue)
+    private const double SpringSettleTolerance = 0.001;
+    private const int SpringMaxMilliseconds = 10_000;
+    private const int SpringSampleCount = 60;
+
+    private MotionEasing(string cssValue, TimeSpan? suggestedDuration = null)
     {
         CssValue = cssValue;
+        SuggestedDuration = suggestedDuration;
     }
 
     /// <summary>The CSS timing-function string sent to the browser, e.g. <c>ease-in-out</c> or <c>cubic-bezier(0.4, 0, 0.2, 1)</c>.</summary>
     public string CssValue { get; }
+
+    /// <summary>
+    /// The time the simulated motion needs to settle, for easings derived from physics (see <see cref="Spring"/>).
+    /// <c>null</c> for every other easing, where the duration is chosen by the transition.
+    /// </summary>
+    public TimeSpan? SuggestedDuration { get; }
 
     /// <summary>Constant speed.</summary>
     public static MotionEasing Linear => new("linear");
@@ -92,10 +103,107 @@ public readonly record struct MotionEasing
     /// <param name="stiffness">Spring stiffness. Default 100.</param>
     /// <param name="damping">Damping ratio. Default 10.</param>
     /// <param name="mass">Mass. Default 1.</param>
-    /// <returns>An easing that emulates spring motion.</returns>
+    /// <returns>
+    /// An easing wrapping <c>linear(...)</c> with 60 samples of a damped harmonic oscillator,
+    /// whose <see cref="SuggestedDuration"/> is the time it takes to settle (capped at 10 seconds).
+    /// </returns>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="stiffness"/> or <paramref name="mass"/> is not a positive finite number, or <paramref name="damping"/> is negative or not finite.</exception>
     public static MotionEasing Spring(double stiffness = 100, double damping = 10, double mass = 1)
     {
-        throw new NotImplementedException();
+        if (!double.IsFinite(stiffness) || stiffness <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(stiffness), stiffness, "Must be a positive finite number.");
+        }
+
+        if (!double.IsFinite(damping) || damping < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(damping), damping, "Must be a non-negative finite number.");
+        }
+
+        if (!double.IsFinite(mass) || mass <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(mass), mass, "Must be a positive finite number.");
+        }
+
+        var omega0 = Math.Sqrt(stiffness / mass);
+        var zeta = damping / (2 * Math.Sqrt(stiffness * mass));
+
+        var duration = FindSpringSettleTime(omega0, zeta);
+        var seconds = duration.TotalSeconds;
+
+        var samples = new string[SpringSampleCount];
+        for (var i = 0; i < SpringSampleCount - 1; i++)
+        {
+            var t = seconds * i / (SpringSampleCount - 1);
+            var value = Math.Round(SpringPosition(t, omega0, zeta), 4);
+
+            // Normalise -0 to 0 so the output never reads "-0.0000".
+            if (value == 0)
+            {
+                value = 0;
+            }
+
+            samples[i] = value.ToString("0.0000", CultureInfo.InvariantCulture);
+        }
+
+        // The last sample is the target itself; x(duration) is within the settle tolerance by definition.
+        samples[SpringSampleCount - 1] = "1";
+
+        var css = "linear(" + string.Join(", ", samples) + ")";
+
+        return new MotionEasing(css, duration);
+    }
+
+    /// <summary>
+    /// Scans the step response at 1 ms resolution and returns the earliest time after which
+    /// the position stays within <see cref="SpringSettleTolerance"/> of the target, capped at 10 seconds.
+    /// </summary>
+    private static TimeSpan FindSpringSettleTime(double omega0, double zeta)
+    {
+        var lastViolation = -1;
+
+        for (var ms = 0; ms <= SpringMaxMilliseconds; ms++)
+        {
+            var position = SpringPosition(ms / 1000.0, omega0, zeta);
+
+            if (Math.Abs(1 - position) >= SpringSettleTolerance)
+            {
+                lastViolation = ms;
+            }
+        }
+
+        return lastViolation >= SpringMaxMilliseconds
+            ? TimeSpan.FromMilliseconds(SpringMaxMilliseconds)
+            : TimeSpan.FromMilliseconds(lastViolation + 1);
+    }
+
+    /// <summary>
+    /// Analytic step response of a damped harmonic oscillator released from rest at 0 towards a target of 1.
+    /// The overdamped branch is written with decaying exponentials only, so it stays finite for very large damping.
+    /// </summary>
+    private static double SpringPosition(double t, double omega0, double zeta)
+    {
+        if (zeta < 1)
+        {
+            // Underdamped.
+            var omegaD = omega0 * Math.Sqrt(1 - zeta * zeta);
+            var decay = Math.Exp(-zeta * omega0 * t);
+            return 1 - decay * (Math.Cos(omegaD * t) + zeta * omega0 / omegaD * Math.Sin(omegaD * t));
+        }
+
+        if (zeta - 1 < 1e-9)
+        {
+            // Critically damped.
+            var decay = Math.Exp(-omega0 * t);
+            return 1 - decay * (1 + omega0 * t);
+        }
+
+        // Overdamped.
+        var a = zeta * omega0;
+        var s = omega0 * Math.Sqrt(zeta * zeta - 1);
+        var slow = (a + s) / (2 * s) * Math.Exp(-(a - s) * t);
+        var fast = (s - a) / (2 * s) * Math.Exp(-(a + s) * t);
+        return 1 - (slow + fast);
     }
 
     /// <inheritdoc />
