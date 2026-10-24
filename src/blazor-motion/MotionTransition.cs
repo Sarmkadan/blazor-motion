@@ -22,7 +22,7 @@ public enum MotionDirection
 /// <param name="Duration">Length of one iteration.</param>
 /// <param name="Delay">Time to wait before the first iteration starts.</param>
 /// <param name="Easing">Timing function.</param>
-/// <param name="Repeat">Number of additional iterations. <c>0</c> plays once; <see cref="int.MaxValue"/> loops forever.</param>
+/// <param name="Repeat">Number of additional iterations. <c>0</c> plays once; <see cref="InfiniteRepeat"/> loops forever.</param>
 /// <param name="Direction">Playback direction across iterations.</param>
 public sealed record MotionTransition(
     TimeSpan Duration,
@@ -31,7 +31,12 @@ public sealed record MotionTransition(
     int Repeat,
     MotionDirection Direction)
 {
-    /// <summary>300 ms, no delay, ease-in-out, single run.</summary>
+    /// <summary>
+    /// Value of <see cref="Repeat"/> that loops the animation indefinitely.
+    /// </summary>
+    public const int InfiniteRepeat = int.MaxValue;
+
+    /// <summary>300 ms, no delay, ease-in-out, single run. Cached; records are value-equal, so sharing is safe.</summary>
     public static MotionTransition Default { get; } = new(
         Duration: TimeSpan.FromMilliseconds(300),
         Delay: TimeSpan.Zero,
