@@ -50,33 +50,83 @@ public sealed record MotionTransition(
 /// </summary>
 public sealed class MotionTransitionBuilder
 {
+    private TimeSpan _duration;
+    private TimeSpan _delay;
+    private MotionEasing _easing;
+    private int _repeat;
+    private MotionDirection _direction;
+
+    /// <summary>Creates a builder starting from <see cref="MotionTransition.Default"/>.</summary>
+    public MotionTransitionBuilder()
+        : this(MotionTransition.Default)
+    {
+    }
+
+    /// <summary>Creates a builder starting from an existing transition, e.g. to derive a variant.</summary>
+    /// <param name="seed">Transition whose values are used as the starting point.</param>
+    public MotionTransitionBuilder(MotionTransition seed)
+    {
+        ArgumentNullException.ThrowIfNull(seed);
+
+        _duration = seed.Duration;
+        _delay = seed.Delay;
+        _easing = seed.Easing;
+        _repeat = seed.Repeat;
+        _direction = seed.Direction;
+    }
+
     /// <summary>Sets the duration of one iteration.</summary>
     /// <param name="duration">Must be non-negative.</param>
     /// <returns>This builder.</returns>
-    public MotionTransitionBuilder Duration(TimeSpan duration) => throw new NotImplementedException();
+    public MotionTransitionBuilder Duration(TimeSpan duration)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(duration.Ticks, nameof(duration));
+        _duration = duration;
+        return this;
+    }
 
     /// <summary>Sets the delay before the first iteration.</summary>
     /// <param name="delay">Must be non-negative.</param>
     /// <returns>This builder.</returns>
-    public MotionTransitionBuilder Delay(TimeSpan delay) => throw new NotImplementedException();
+    public MotionTransitionBuilder Delay(TimeSpan delay)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(delay.Ticks, nameof(delay));
+        _delay = delay;
+        return this;
+    }
 
     /// <summary>Sets the timing function.</summary>
     /// <param name="easing">Any <see cref="MotionEasing"/>.</param>
     /// <returns>This builder.</returns>
-    public MotionTransitionBuilder Ease(MotionEasing easing) => throw new NotImplementedException();
+    public MotionTransitionBuilder Ease(MotionEasing easing)
+    {
+        _easing = easing;
+        return this;
+    }
 
     /// <summary>Repeats the animation a number of extra times.</summary>
     /// <param name="count">Additional iterations. Use <see cref="Forever"/> to loop.</param>
     /// <param name="direction">Direction across iterations.</param>
     /// <returns>This builder.</returns>
-    public MotionTransitionBuilder Repeat(int count, MotionDirection direction = MotionDirection.Normal) => throw new NotImplementedException();
+    public MotionTransitionBuilder Repeat(int count, MotionDirection direction = MotionDirection.Normal)
+    {
+        _repeat = count;
+        _direction = direction;
+        return this;
+    }
 
     /// <summary>Loops the animation indefinitely.</summary>
     /// <param name="direction">Direction across iterations.</param>
     /// <returns>This builder.</returns>
-    public MotionTransitionBuilder Forever(MotionDirection direction = MotionDirection.Alternate) => throw new NotImplementedException();
+    public MotionTransitionBuilder Forever(MotionDirection direction = MotionDirection.Alternate)
+    {
+        _repeat = MotionTransition.InfiniteRepeat;
+        _direction = direction;
+        return this;
+    }
 
     /// <summary>Materialises the immutable transition.</summary>
     /// <returns>The configured <see cref="MotionTransition"/>.</returns>
-    public MotionTransition Build() => throw new NotImplementedException();
+    public MotionTransition Build() =>
+        new(_duration, _delay, _easing, _repeat, _direction);
 }
