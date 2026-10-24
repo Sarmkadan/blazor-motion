@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace BlazorMotion;
 
 /// <summary>
@@ -15,6 +17,9 @@ namespace BlazorMotion;
 /// </example>
 public sealed class MotionBuilder
 {
+    private MotionKeyframe? _from;
+    private readonly List<MotionKeyframe> _to = new();
+
     /// <summary>
     /// Defines the starting keyframe. Optional; when omitted the element's current computed style is used.
     /// </summary>
@@ -29,7 +34,11 @@ public sealed class MotionBuilder
         double? y = null,
         double? scale = null,
         double? rotate = null,
-        double? opacity = null) => throw new NotImplementedException();
+        double? opacity = null)
+    {
+        _from = new MotionKeyframe(BuildProperties(x, y, scale, rotate, opacity), Offset: 0);
+        return this;
+    }
 
     /// <summary>
     /// Appends a target keyframe. Call several times to create multi-step animations.
@@ -45,7 +54,16 @@ public sealed class MotionBuilder
         double? y = null,
         double? scale = null,
         double? rotate = null,
-        double? opacity = null) => throw new NotImplementedException();
+        double? opacity = null)
+    {
+        if (x is null && y is null && scale is null && rotate is null && opacity is null)
+        {
+            throw new ArgumentException("At least one property must be set");
+        }
+
+        _to.Add(new MotionKeyframe(BuildProperties(x, y, scale, rotate, opacity)));
+        return this;
+    }
 
     /// <summary>
     /// Appends a target keyframe with arbitrary CSS properties, for anything <see cref="To(double?, double?, double?, double?, double?)"/> does not cover.
@@ -53,7 +71,13 @@ public sealed class MotionBuilder
     /// <param name="cssProperties">camelCase CSS property -> value.</param>
     /// <param name="offset">Position 0..1, or <c>null</c> for even distribution.</param>
     /// <returns>This builder.</returns>
-    public MotionBuilder To(IReadOnlyDictionary<string, string> cssProperties, double? offset = null) => throw new NotImplementedException();
+    public MotionBuilder To(IReadOnlyDictionary<string, string> cssProperties, double? offset = null)
+    {
+        ArgumentNullException.ThrowIfNull(cssProperties);
+
+        _to.Add(new MotionKeyframe(new Dictionary<string, string>(cssProperties), offset));
+        return this;
+    }
 
     /// <summary>
     /// Configures timing via a nested builder.
@@ -90,4 +114,52 @@ public sealed class MotionBuilder
     /// <returns>A <see cref="MotionAnimation"/>.</returns>
     /// <exception cref="InvalidOperationException">Thrown when no <c>To</c> keyframe was added.</exception>
     public MotionAnimation Build() => throw new NotImplementedException();
+
+    /// <summary>
+    /// Maps the transform-related and opacity arguments to CSS properties. Only non-null parts are emitted.
+    /// </summary>
+    private static Dictionary<string, string> BuildProperties(
+        double? x,
+        double? y,
+        double? scale,
+        double? rotate,
+        double? opacity)
+    {
+        var properties = new Dictionary<string, string>();
+
+        var transform = new List<string>();
+        if (x is { } tx)
+        {
+            transform.Add($"translateX({Format(tx)}px)");
+        }
+
+        if (y is { } ty)
+        {
+            transform.Add($"translateY({Format(ty)}px)");
+        }
+
+        if (scale is { } s)
+        {
+            transform.Add($"scale({Format(s)})");
+        }
+
+        if (rotate is { } r)
+        {
+            transform.Add($"rotate({Format(r)}deg)");
+        }
+
+        if (transform.Count > 0)
+        {
+            properties["transform"] = string.Join(' ', transform);
+        }
+
+        if (opacity is { } o)
+        {
+            properties["opacity"] = Format(o);
+        }
+
+        return properties;
+    }
+
+    private static string Format(double value) => value.ToString(CultureInfo.InvariantCulture);
 }
