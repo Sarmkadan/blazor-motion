@@ -17,11 +17,17 @@ internal sealed class MotionHandle : IMotionHandle
     /// Creates a handle over the given animation ids and starts watching them for completion.
     /// </summary>
     /// <param name="module">The loaded <c>blazor-motion.js</c> module.</param>
-    /// <param name="animationIds">Ids returned by <c>animate</c> or <c>playTimeline</c>.</param>
+    /// <param name="animationIds">Ids returned by <c>animate</c> or <c>playTimeline</c>. Must not be empty.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="module"/> or <paramref name="animationIds"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException"><paramref name="animationIds"/> is empty.</exception>
     public MotionHandle(IJSObjectReference module, IReadOnlyList<int> animationIds)
     {
         ArgumentNullException.ThrowIfNull(module);
         ArgumentNullException.ThrowIfNull(animationIds);
+        if (animationIds.Count == 0)
+        {
+            throw new ArgumentException("At least one animation id is required.", nameof(animationIds));
+        }
 
         _module = module;
         _animationIds = [.. animationIds];
@@ -42,14 +48,20 @@ internal sealed class MotionHandle : IMotionHandle
     public Task Finished => _finished.Task;
 
     /// <inheritdoc />
+    /// <exception cref="InvalidOperationException">The animation was already cancelled.</exception>
     public async ValueTask PauseAsync(CancellationToken cancellationToken = default)
     {
+        ThrowIfCancelled();
+
         await InvokeForEachAsync("pause", cancellationToken);
     }
 
     /// <inheritdoc />
+    /// <exception cref="InvalidOperationException">The animation was already cancelled.</exception>
     public async ValueTask PlayAsync(CancellationToken cancellationToken = default)
     {
+        ThrowIfCancelled();
+
         await InvokeForEachAsync("play", cancellationToken);
     }
 
@@ -108,6 +120,15 @@ internal sealed class MotionHandle : IMotionHandle
         catch (Exception exception)
         {
             _finished.TrySetException(exception);
+        }
+    }
+
+    /// <exception cref="InvalidOperationException">The animation was already cancelled.</exception>
+    private void ThrowIfCancelled()
+    {
+        if (_cancelled)
+        {
+            throw new InvalidOperationException("Animation was cancelled");
         }
     }
 

@@ -21,6 +21,7 @@ internal sealed class MotionInterop : IMotionInterop, IAsyncDisposable
     /// </summary>
     /// <param name="js">The JS runtime of the current circuit or WebAssembly host.</param>
     /// <param name="options">Supplies the module path and the global settings forwarded to JS.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="js"/> or <paramref name="options"/> is <see langword="null"/>.</exception>
     public MotionInterop(IJSRuntime js, IOptions<MotionOptions> options)
     {
         ArgumentNullException.ThrowIfNull(js);
@@ -31,8 +32,23 @@ internal sealed class MotionInterop : IMotionInterop, IAsyncDisposable
     }
 
     /// <inheritdoc />
+    /// <exception cref="ObjectDisposedException">This interop has been disposed.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="animation"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException">
+    /// <paramref name="animation"/> has no keyframes, or <paramref name="target"/> is not rendered yet
+    /// (its <see cref="ElementReference.Id"/> is null or empty).
+    /// </exception>
     public async ValueTask<IMotionHandle> AnimateAsync(ElementReference target, MotionAnimation animation, CancellationToken cancellationToken = default)
     {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        ArgumentNullException.ThrowIfNull(animation);
+        if (animation.Keyframes.Count == 0)
+        {
+            throw new ArgumentException("Animation has no keyframes.", nameof(animation));
+        }
+
+        ValidateRendered(target);
+
         var module = await GetModuleAsync(cancellationToken);
         var payload = MotionPayloadMapper.ToPayload(animation);
         var id = await module.InvokeAsync<int>("animate", cancellationToken, target, payload);
@@ -41,8 +57,18 @@ internal sealed class MotionInterop : IMotionInterop, IAsyncDisposable
     }
 
     /// <inheritdoc />
+    /// <exception cref="ObjectDisposedException">This interop has been disposed.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="timeline"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException"><paramref name="timeline"/> has no entries.</exception>
     public async ValueTask<IMotionHandle> PlayAsync(MotionTimeline timeline, CancellationToken cancellationToken = default)
     {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        ArgumentNullException.ThrowIfNull(timeline);
+        if (timeline.Entries.Count == 0)
+        {
+            throw new ArgumentException("Timeline has no entries");
+        }
+
         var module = await GetModuleAsync(cancellationToken);
         var entries = MotionPayloadMapper.ToPayload(timeline);
         var ids = await module.InvokeAsync<int[]>("playTimeline", cancellationToken, entries);
@@ -51,8 +77,15 @@ internal sealed class MotionInterop : IMotionInterop, IAsyncDisposable
     }
 
     /// <inheritdoc />
+    /// <exception cref="ObjectDisposedException">This interop has been disposed.</exception>
+    /// <exception cref="ArgumentException">
+    /// <paramref name="target"/> is not rendered yet (its <see cref="ElementReference.Id"/> is null or empty).
+    /// </exception>
     public async ValueTask CancelAllAsync(ElementReference target, CancellationToken cancellationToken = default)
     {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        ValidateRendered(target);
+
         var module = await GetModuleAsync(cancellationToken);
 
         await module.InvokeVoidAsync("cancelAll", cancellationToken, target);
@@ -88,6 +121,18 @@ internal sealed class MotionInterop : IMotionInterop, IAsyncDisposable
         finally
         {
             _moduleLock.Release();
+        }
+    }
+
+    /// <summary>
+    /// Rejects an element that has no id yet, i.e. a default <see cref="ElementReference"/> captured before the element rendered.
+    /// </summary>
+    /// <exception cref="ArgumentException"><paramref name="target"/> is not rendered yet.</exception>
+    private static void ValidateRendered(ElementReference target)
+    {
+        if (string.IsNullOrEmpty(target.Id))
+        {
+            throw new ArgumentException("Element is not rendered yet; call after OnAfterRenderAsync");
         }
     }
 
