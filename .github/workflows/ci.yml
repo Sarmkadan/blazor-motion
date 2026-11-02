@@ -35,7 +35,7 @@ jobs:
         run: dotnet pack src/blazor-motion/blazor-motion.csproj --no-build -c Release -o artifacts
 
       - name: Upload package
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: nupkg
           path: artifacts/*.nupkg
